@@ -1,34 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import {
-  ChevronsLeft,
-  ChevronsRight,
-  Droplets,
-  Lightbulb,
-  Layers,
-  Route,
-  Waves,
-  Zap,
-} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Layers } from "lucide-react";
 
-const ASSET_LAYERS = [
-  { id: "water", label: "Water Mains", icon: Droplets, count: 1284, color: "text-sky-400" },
-  { id: "roads", label: "Road Network", icon: Route, count: 342, color: "text-amber-400" },
-  { id: "lights", label: "Streetlights", icon: Lightbulb, count: 5210, color: "text-yellow-400" },
-  { id: "sewer", label: "Sewer Lines", icon: Waves, count: 876, color: "text-emerald-400" },
-  { id: "power", label: "Power Grid", icon: Zap, count: 198, color: "text-purple-400" },
-];
+export interface SidebarLayer {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  count: number;
+  color: string;
+}
 
-export default function Sidebar() {
+interface SidebarProps {
+  layers: SidebarLayer[];
+  active: Record<string, boolean>;
+  onToggle: (id: string) => void;
+}
+
+export default function Sidebar({ layers, active, onToggle }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const [activeLayers, setActiveLayers] = useState<Record<string, boolean>>({
-    water: true,
-    roads: true,
-    lights: false,
-    sewer: false,
-    power: false,
-  });
 
   return (
     <aside
@@ -53,16 +44,14 @@ export default function Sidebar() {
       </div>
 
       <div className="flex-1 overflow-y-auto py-2">
-        {ASSET_LAYERS.map((layer) => {
+        {layers.map((layer) => {
           const Icon = layer.icon;
-          const isActive = activeLayers[layer.id];
+          const isActive = active[layer.id];
           return (
             <button
               key={layer.id}
               type="button"
-              onClick={() =>
-                setActiveLayers((prev) => ({ ...prev, [layer.id]: !prev[layer.id] }))
-              }
+              onClick={() => onToggle(layer.id)}
               className={`group flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-slate-800/60 ${
                 collapsed ? "justify-center" : ""
               }`}
@@ -82,7 +71,7 @@ export default function Sidebar() {
                     {layer.label}
                   </span>
                   <span className="text-[11px] tabular-nums text-slate-600">
-                    {layer.count.toLocaleString()}
+                    ({layer.count.toLocaleString()})
                   </span>
                 </span>
               )}

@@ -1,0 +1,89 @@
+import L from "leaflet";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { Droplets, Zap } from "lucide-react";
+import type {
+  AssetCondition,
+  SurfaceType,
+  TrafficLoad,
+  UtilityStatus,
+  UtilityType,
+} from "./data/infrastructure";
+
+export const CONDITION_COLORS: Record<AssetCondition, { fill: string; stroke: string }> = {
+  Optimal: { fill: "#10b981", stroke: "#34d399" },
+  Warning: { fill: "#f59e0b", stroke: "#fbbf24" },
+  Critical: { fill: "#f43f5e", stroke: "#fb7185" },
+};
+
+export const SURFACE_COLORS: Record<SurfaceType, string> = {
+  Asphalt: "#94a3b8",
+  Concrete: "#e2e8f0",
+  Gravel: "#d97706",
+};
+
+export const TRAFFIC_WEIGHT: Record<TrafficLoad, number> = {
+  Low: 2,
+  Medium: 3.5,
+  High: 5,
+};
+
+const UTILITY_COLORS: Record<UtilityType, string> = {
+  Power: "#c084fc",
+  Water: "#38bdf8",
+};
+
+export function buildingStyle(condition: AssetCondition) {
+  const { fill, stroke } = CONDITION_COLORS[condition];
+  return {
+    color: stroke,
+    weight: 1.5,
+    fillColor: fill,
+    fillOpacity: 0.35,
+  };
+}
+
+export function roadStyle(surfaceType: SurfaceType, trafficLoad: TrafficLoad) {
+  return {
+    color: SURFACE_COLORS[surfaceType],
+    weight: TRAFFIC_WEIGHT[trafficLoad],
+    opacity: 0.85,
+    lineCap: "round" as const,
+  };
+}
+
+export function createUtilityIcon(utilityType: UtilityType, status: UtilityStatus): L.DivIcon {
+  const color = UTILITY_COLORS[utilityType];
+  const Icon = utilityType === "Power" ? Zap : Droplets;
+  const isMaintenance = status === "Maintenance";
+
+  const html = renderToStaticMarkup(
+    createElement(
+      "span",
+      {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "22px",
+          height: "22px",
+          borderRadius: "9999px",
+          background: "#020617",
+          border: `2px solid ${isMaintenance ? "#f59e0b" : color}`,
+          boxShadow: isMaintenance
+            ? "0 0 0 3px rgba(245, 158, 11, 0.25)"
+            : `0 0 0 3px ${color}33`,
+        },
+      },
+      createElement(Icon, { size: 11, color, strokeWidth: 2.5 })
+    )
+  );
+
+  return L.divIcon({
+    html,
+    className: "utility-marker-icon",
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+    popupAnchor: [0, -11],
+  });
+}
