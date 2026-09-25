@@ -70,3 +70,52 @@ body {
 .leaflet-control-attribution a {
   color: #94a3b8 !important;
 }
+
+/* Dark-themed hover tooltips for vector features */
+.map-tooltip {
+  background: #020617 !important;
+  color: #e2e8f0 !important;
+  border: 1px solid #1e293b !important;
+  border-radius: 0.375rem !important;
+  padding: 0.25rem 0.5rem !important;
+  font-size: 11px !important;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.4) !important;
+}
+
+.map-tooltip::before {
+  border-top-color: #1e293b !important;
+}
+
+/* Crosshair cursor for the incident-reporting tool, strong enough to beat
+   Leaflet's own drag/interactive cursor rules */
+.leaflet-container.reporting-cursor,
+.leaflet-container.reporting-cursor .leaflet-interactive,
+.leaflet-container.reporting-cursor .leaflet-grab {
+  cursor: crosshair !important;
+}
+
+@keyframes incident-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.modal-pop {
+  animation: modal-pop 0.18s ease-out;
+}

@@ -1,10 +1,15 @@
 "use client";
 
-import { Bell, Download, MapPinned, Search, Settings } from "lucide-react";
+import { AlertTriangle, Bell, Download, MapPinned, Search, Settings } from "lucide-react";
 
 const TOOLBAR_ICONS = [Search, Download, Bell, Settings];
 
-export default function Header() {
+interface HeaderProps {
+  reportMode: boolean;
+  onToggleReportMode: () => void;
+}
+
+export default function Header({ reportMode, onToggleReportMode }: HeaderProps) {
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-950/80 px-4 backdrop-blur">
       <div className="flex items-center gap-3">
@@ -25,16 +30,31 @@ export default function Header() {
           Live Telemetry Active
         </span>
       </div>
-      <div className="flex items-center gap-1">
-        {TOOLBAR_ICONS.map((Icon, i) => (
-          <button
-            key={i}
-            type="button"
-            className="rounded-md p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-emerald-400"
-          >
-            <Icon size={16} />
-          </button>
-        ))}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onToggleReportMode}
+          className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+            reportMode
+              ? "border-rose-500/40 bg-rose-500/10 text-rose-400"
+              : "border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700 hover:text-emerald-400"
+          }`}
+        >
+          <AlertTriangle size={14} />
+          {reportMode ? "Click Map to Report…" : "Report Incident"}
+        </button>
+        <div className="mx-1 h-5 w-px bg-slate-800" />
+        <div className="flex items-center gap-1">
+          {TOOLBAR_ICONS.map((Icon, i) => (
+            <button
+              key={i}
+              type="button"
+              className="rounded-md p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-emerald-400"
+            >
+              <Icon size={16} />
+            </button>
+          ))}
+        </div>
       </div>
     </header>
   );

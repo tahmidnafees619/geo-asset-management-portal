@@ -1,7 +1,7 @@
 import L from "leaflet";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Droplets, Zap } from "lucide-react";
+import { AlertTriangle, Droplets, Zap } from "lucide-react";
 import type {
   AssetCondition,
   SurfaceType,
@@ -9,6 +9,7 @@ import type {
   UtilityStatus,
   UtilityType,
 } from "./data/infrastructure";
+import type { IncidentPriority } from "./data/incidents";
 
 export const CONDITION_COLORS: Record<AssetCondition, { fill: string; stroke: string }> = {
   Optimal: { fill: "#10b981", stroke: "#34d399" },
@@ -85,5 +86,69 @@ export function createUtilityIcon(utilityType: UtilityType, status: UtilityStatu
     iconSize: [22, 22],
     iconAnchor: [11, 11],
     popupAnchor: [0, -11],
+  });
+}
+
+const PRIORITY_COLORS: Record<IncidentPriority, string> = {
+  Low: "#fbbf24",
+  Medium: "#f97316",
+  High: "#ef4444",
+};
+
+export function createIncidentIcon(priority: IncidentPriority): L.DivIcon {
+  const color = PRIORITY_COLORS[priority];
+  const pulse = priority === "High";
+
+  const html = renderToStaticMarkup(
+    createElement(
+      "span",
+      {
+        style: {
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "24px",
+          height: "24px",
+        },
+      },
+      pulse &&
+        createElement("span", {
+          style: {
+            position: "absolute",
+            inset: 0,
+            borderRadius: "9999px",
+            background: color,
+            opacity: 0.5,
+            animation: "incident-pulse 1.6s ease-out infinite",
+          },
+        }),
+      createElement(
+        "span",
+        {
+          style: {
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "24px",
+            height: "24px",
+            borderRadius: "9999px",
+            background: color,
+            border: "2px solid #020617",
+            boxShadow: `0 0 0 3px ${color}55`,
+          },
+        },
+        createElement(AlertTriangle, { size: 13, color: "#020617", strokeWidth: 2.5 })
+      )
+    )
+  );
+
+  return L.divIcon({
+    html,
+    className: "incident-marker-icon",
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -12],
   });
 }

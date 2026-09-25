@@ -2,17 +2,24 @@
 
 import type { Layer } from "leaflet";
 import L from "leaflet";
-import { GeoJSON, MapContainer, TileLayer, ZoomControl, useMapEvents } from "react-leaflet";
-import type { Feature, Point } from "geojson";
+import { useEffect, useMemo, useRef } from "react";
 import {
-  buildingsData,
+  GeoJSON,
+  MapContainer,
+  Marker,
+  TileLayer,
+  Tooltip,
+  ZoomControl,
+  useMapEvents,
+} from "react-leaflet";
+import type { Feature, FeatureCollection, Point, Polygon } from "geojson";
+import {
   roadsData,
-  utilitiesData,
   type BuildingProperties,
-  type RoadProperties,
   type UtilityProperties,
 } from "../lib/data/infrastructure";
-import { buildingStyle, createUtilityIcon, roadStyle } from "../lib/mapStyles";
+import type { Incident } from "../lib/data/incidents";
+import { buildingStyle, createIncidentIcon, createUtilityIcon, roadStyle } from "../lib/mapStyles";
 
 // Leaflet's default marker icons reference relative asset paths that break
 // under Next.js bundling — point them at the CDN instead.
@@ -32,12 +39,20 @@ export interface LayerVisibility {
   buildings: boolean;
   utilities: boolean;
   roads: boolean;
+  incidents: boolean;
 }
 
 interface MapCanvasProps {
   onMouseMove: (lat: number, lng: number) => void;
   onMouseLeave?: () => void;
   visibleLayers: LayerVisibility;
+  buildings: FeatureCollection<Polygon, BuildingProperties>;
+  utilities: FeatureCollection<Point, UtilityProperties>;
+  incidents: Incident[];
+  reportMode: boolean;
+  onSelectBuilding: (id: string) => void;
+  onSelectUtility: (id: string) => void;
+  onMapClick: (lat: number, lng: number) => void;
 }
 
 interface MouseTrackerProps {
@@ -57,46 +72,54 @@ function MouseTracker({ onMouseMove, onMouseLeave }: MouseTrackerProps) {
   return null;
 }
 
-function bindBuildingPopup(feature: Feature<never, BuildingProperties>, layer: Layer) {
-  const { name, type, condition, built_year, last_inspected } = feature.properties;
-  layer.bindPopup(
-    `<div class="text-xs leading-relaxed">
-      <p class="font-semibold text-slate-100">${name}</p>
-      <p class="text-slate-400">${type} &middot; Built ${built_year}</p>
-      <p class="mt-1">Condition: <span class="font-medium">${condition}</span></p>
-      <p class="text-slate-400">Last inspected ${last_inspected}</p>
-    </div>`
-  );
+function ReportClickHandler({
+  reportMode,
+  onMapClick,
+}: {
+  reportMode: boolean;
+  onMapClick: (lat: number, lng: number) => void;
+}) {
+  useMapEvents({
+    click(e) {
+      if (reportMode) onMapClick(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
 }
 
-function bindUtilityPopup(feature: Feature<Point, UtilityProperties>, layer: Layer) {
-  const { utility_type, capacity, status } = feature.properties;
-  layer.bindPopup(
-    `<div class="text-xs leading-relaxed">
-      <p class="font-semibold text-slate-100">${utility_type} Asset</p>
-      <p class="text-slate-400">${capacity}</p>
-      <p class="mt-1">Status: <span class="font-medium">${status}</span></p>
-    </div>`
-  );
-}
+export default function MapCanvas({
+  onMouseMove,
+  onMouseLeave,
+  visibleLayers,
+  buildings,
+  utilities,
+  incidents,
+  reportMode,
+  onSelectBuilding,
+  onSelectUtility,
+  onMapClick,
+}: MapCanvasProps) {
+  // onEachFeature closures are captured once when a GeoJSON layer is (re)created,
+  // so reportMode is read through a ref to avoid acting on a stale value on click.
+  const reportModeRef = useRef(reportMode);
+  useEffect(() => {
+    reportModeRef.current = reportMode;
+  }, [reportMode]);
 
-function bindRoadPopup(feature: Feature<never, RoadProperties>, layer: Layer) {
-  const { street_name, surface_type, traffic_load } = feature.properties;
-  layer.bindPopup(
-    `<div class="text-xs leading-relaxed">
-      <p class="font-semibold text-slate-100">${street_name}</p>
-      <p class="text-slate-400">${surface_type} surface</p>
-      <p class="mt-1">Traffic load: <span class="font-medium">${traffic_load}</span></p>
-    </div>`
+  const buildingsKey = useMemo(
+    () => `buildings-${buildings.features.map((f) => `${f.properties.id}:${f.properties.condition}`).join("|")}`,
+    [buildings]
   );
-}
+  const utilitiesKey = useMemo(
+    () => `utilities-${utilities.features.map((f) => `${f.properties.id}:${f.properties.status}`).join("|")}`,
+    [utilities]
+  );
 
-export default function MapCanvas({ onMouseMove, onMouseLeave, visibleLayers }: MapCanvasProps) {
   return (
     <MapContainer
       center={CITY_CENTER}
       zoom={DEFAULT_ZOOM}
-      className="h-full w-full bg-slate-950"
+      className={`h-full w-full bg-slate-950 ${reportMode ? "reporting-cursor" : ""}`}
       zoomControl={false}
     >
       <TileLayer
@@ -105,6 +128,7 @@ export default function MapCanvas({ onMouseMove, onMouseLeave, visibleLayers }: 
       />
       <ZoomControl position="bottomright" />
       <MouseTracker onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} />
+      <ReportClickHandler reportMode={reportMode} onMapClick={onMapClick} />
 
       {visibleLayers.roads && (
         <GeoJSON
@@ -113,31 +137,74 @@ export default function MapCanvas({ onMouseMove, onMouseLeave, visibleLayers }: 
           style={(feature) =>
             roadStyle(feature!.properties!.surface_type, feature!.properties!.traffic_load)
           }
-          onEachFeature={bindRoadPopup as (feature: Feature, layer: Layer) => void}
+          onEachFeature={(feature, layer) => {
+            layer.bindTooltip(feature.properties!.street_name, {
+              direction: "top",
+              sticky: true,
+              className: "map-tooltip",
+            });
+          }}
         />
       )}
 
       {visibleLayers.buildings && (
         <GeoJSON
-          key="buildings"
-          data={buildingsData}
+          key={buildingsKey}
+          data={buildings}
           style={(feature) => buildingStyle(feature!.properties!.condition)}
-          onEachFeature={bindBuildingPopup as (feature: Feature, layer: Layer) => void}
+          onEachFeature={(feature, layer: Layer) => {
+            const props = (feature as Feature<Polygon, BuildingProperties>).properties;
+            layer.bindTooltip(props.name, {
+              direction: "top",
+              sticky: true,
+              className: "map-tooltip",
+            });
+            layer.on("click", (e) => {
+              if (reportModeRef.current) return;
+              L.DomEvent.stopPropagation(e);
+              onSelectBuilding(props.id);
+            });
+          }}
         />
       )}
 
       {visibleLayers.utilities && (
         <GeoJSON
-          key="utilities"
-          data={utilitiesData}
+          key={utilitiesKey}
+          data={utilities}
           pointToLayer={(feature, latlng) =>
             L.marker(latlng, {
               icon: createUtilityIcon(feature.properties.utility_type, feature.properties.status),
             })
           }
-          onEachFeature={bindUtilityPopup as (feature: Feature, layer: Layer) => void}
+          onEachFeature={(feature, layer: Layer) => {
+            const props = (feature as Feature<Point, UtilityProperties>).properties;
+            layer.bindTooltip(`${props.utility_type} Asset`, {
+              direction: "top",
+              sticky: true,
+              className: "map-tooltip",
+            });
+            layer.on("click", (e) => {
+              if (reportModeRef.current) return;
+              L.DomEvent.stopPropagation(e);
+              onSelectUtility(props.id);
+            });
+          }}
         />
       )}
+
+      {visibleLayers.incidents &&
+        incidents.map((incident) => (
+          <Marker
+            key={incident.id}
+            position={[incident.lat, incident.lng]}
+            icon={createIncidentIcon(incident.priority)}
+          >
+            <Tooltip direction="top" className="map-tooltip">
+              {incident.title} · {incident.category}
+            </Tooltip>
+          </Marker>
+        ))}
     </MapContainer>
   );
 }
