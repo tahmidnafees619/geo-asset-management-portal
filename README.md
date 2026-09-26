@@ -57,7 +57,7 @@ The app is a single Next.js App Router route (`app/page.tsx`) that owns all appl
 ## 2. Feature Highlights
 
 ### Municipal-grade spatial data model (BGT/BAG-inspired)
-Every feature — buildings, utility points, and road segments — carries a `bgt_classification` field mirroring the Dutch **BGT** (*Basisregistratie Grootschalige Topografie*) / **BAG** topography standard used by municipal GIS platforms like HawarIT:
+Every feature — buildings, utility points, and road segments — carries a `bgt_classification` field mirroring the Dutch **BGT** (*Basisregistratie Grootschalige Topografie*) / **BAG** topography standard used by municipal GIS platforms:
 
 | Layer      | `bgt_classification` | Meaning                          |
 | ---------- | --------------------- | --------------------------------- |
