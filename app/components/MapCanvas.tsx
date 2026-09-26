@@ -1,5 +1,34 @@
 "use client";
 
+/**
+ * The Leaflet map engine.
+ *
+ * ## The `{ ssr: false }` dynamic-import contract
+ * Leaflet reads `window`/`document` as soon as it's imported (for feature
+ * detection — pointer events, touch support, etc.), which doesn't exist
+ * during Next.js server-side rendering and would crash the server render.
+ * This component is therefore never imported directly — `app/page.tsx`
+ * loads it exclusively via `next/dynamic` with `{ ssr: false }`:
+ *
+ *   const MapCanvas = dynamic(() => import("./components/MapCanvas"), { ssr: false });
+ *
+ * That tells Next.js to skip this module entirely on the server and only
+ * fetch/evaluate it in the browser, after hydration. Do not add a static
+ * `import MapCanvas from "./components/MapCanvas"` anywhere in a
+ * server-rendered path — that would reintroduce the crash this guards
+ * against. The default export here is a plain component; the `ssr: false`
+ * behavior lives entirely in the `dynamic()` call at the import site.
+ *
+ * ## Event suppression during Report Incident / Measure mode
+ * `reportMode` and `measureMode` are "click the map to do X" tools. While
+ * either is active, clicking a building/utility/incident must NOT also open
+ * its inspector — it should only place an incident pin or a measurement
+ * vertex. See the per-layer `onEachFeature`/`eventHandlers` click handlers
+ * below: each checks the active tool mode first and, if a tool is active,
+ * returns early without calling `L.DomEvent.stopPropagation`, letting the
+ * click bubble up to `ReportClickHandler`/`MeasureClickHandler` on the map
+ * itself instead of opening the Feature Inspector.
+ */
 import type { Layer } from "leaflet";
 import L from "leaflet";
 import { useEffect, useMemo, useRef } from "react";

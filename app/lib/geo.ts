@@ -16,6 +16,19 @@ export function lineMidpoint(feature: Feature<LineString>): [number, number] {
   return [lat, lng];
 }
 
+/**
+ * Great-circle distance between two lat/lng points, in meters, via the
+ * Haversine formula:
+ *
+ *   a = sin²(Δlat/2) + cos(lat1)·cos(lat2)·sin²(Δlng/2)
+ *   d = 2 · R · asin(√a)
+ *
+ * This treats the Earth as a sphere (not an ellipsoid), which introduces at
+ * most ~0.5% error — negligible at the city-block scale this app operates
+ * at, and far cheaper than a full geodesic (Vincenty) solution. `Math.min`
+ * guards against `√a` drifting fractionally above 1 from floating-point
+ * rounding, which would otherwise make `asin` return `NaN`.
+ */
 export function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const toRad = (deg: number) => (deg * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
@@ -33,6 +46,20 @@ export interface NearbyAsset {
   distance: number;
 }
 
+/**
+ * The 300m proximity buffer engine behind "Run Proximity Buffer" in the
+ * Feature Inspector and the Incident Reporter.
+ *
+ * This is a single **O(N)** pass over every building, utility, and incident
+ * — one `haversineMeters` call per feature, no spatial index (R-tree/grid).
+ * At this dataset's scale (tens of features) that's the right trade-off: a
+ * bounding-box pre-filter or quad-tree would only pay for itself once the
+ * feature count reaches the thousands, and would add real complexity for no
+ * measurable benefit here. If this dataset grows substantially, the cheap
+ * next step is a bounding-box pre-check (reject anything outside a
+ * `radiusMeters`-sized lat/lng box before the trig-heavy haversine call)
+ * ahead of reaching for a full spatial index.
+ */
 export function findNearbyAssets(
   center: { lat: number; lng: number },
   radiusMeters: number,

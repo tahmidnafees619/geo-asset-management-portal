@@ -1,5 +1,32 @@
 "use client";
 
+/**
+ * Composition root and single source of truth for the entire portal.
+ *
+ * ## State lifting
+ * Every piece of state that more than one panel needs to read or write —
+ * `buildings`, `utilities`, `incidents`, the current `selection`, the active
+ * `basemap`, per-layer `layerOpacity`, `reportMode`/`measureMode`, etc. —
+ * lives here, in this one component, rather than inside `MapCanvas` or the
+ * drawer/modal components themselves. Those components are intentionally
+ * "dumb": they receive state as props and report user intent back up via
+ * callback props (`onSelectBuilding`, `onUpdateBuildingCondition`, …), but
+ * never hold their own copy of shared state. This is what makes, for
+ * example, editing a building's condition in `FeatureDrawer` and having it
+ * immediately re-color on the map, show up in the Sidebar's asset count, and
+ * factor into the Alert Center — all at once, from one `setBuildings` call —
+ * possible without any cross-component synchronization code.
+ *
+ * ## Dynamic layer re-rendering
+ * `MapCanvas` is loaded via `next/dynamic({ ssr: false })` (see the comment
+ * there) and receives the live `buildings`/`utilities`/`incidents`/
+ * `layerOpacity`/`basemap` state as plain props. Because Leaflet's GeoJSON
+ * layers don't reactively diff their `data` prop the way a DOM element would
+ * a style prop, `MapCanvas` forces a clean re-render of each layer via a
+ * content-derived `key` (see `buildingsKey`/`utilitiesKey`/`roadsKey` there)
+ * — so a change made here (edit a condition, drag an opacity slider, switch
+ * basemap) always reaches the map as a fresh layer rather than a stale one.
+ */
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Building2, Route, Zap } from "lucide-react";
