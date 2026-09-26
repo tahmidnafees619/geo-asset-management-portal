@@ -10,6 +10,7 @@ import {
   TileLayer,
   Tooltip,
   ZoomControl,
+  useMap,
   useMapEvents,
 } from "react-leaflet";
 import type { Feature, FeatureCollection, Point, Polygon } from "geojson";
@@ -20,6 +21,7 @@ import {
 } from "../lib/data/infrastructure";
 import type { Incident } from "../lib/data/incidents";
 import { buildingStyle, createIncidentIcon, createUtilityIcon, roadStyle } from "../lib/mapStyles";
+import { getBasemap, type BasemapId } from "../lib/basemaps";
 
 // Leaflet's default marker icons reference relative asset paths that break
 // under Next.js bundling — point them at the CDN instead.
@@ -42,14 +44,31 @@ export interface LayerVisibility {
   incidents: boolean;
 }
 
+export interface LayerOpacity {
+  buildings: number;
+  utilities: number;
+  roads: number;
+  incidents: number;
+}
+
+export interface FlyToTarget {
+  lat: number;
+  lng: number;
+  zoom: number;
+  nonce: number;
+}
+
 interface MapCanvasProps {
   onMouseMove: (lat: number, lng: number) => void;
   onMouseLeave?: () => void;
   visibleLayers: LayerVisibility;
+  layerOpacity: LayerOpacity;
+  basemap: BasemapId;
   buildings: FeatureCollection<Polygon, BuildingProperties>;
   utilities: FeatureCollection<Point, UtilityProperties>;
   incidents: Incident[];
   reportMode: boolean;
+  flyToTarget: FlyToTarget | null;
   onSelectBuilding: (id: string) => void;
   onSelectUtility: (id: string) => void;
   onMapClick: (lat: number, lng: number) => void;
@@ -87,14 +106,30 @@ function ReportClickHandler({
   return null;
 }
 
+function FlyToController({ target }: { target: FlyToTarget | null }) {
+  const map = useMap();
+  const lastNonce = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!target || target.nonce === lastNonce.current) return;
+    lastNonce.current = target.nonce;
+    map.flyTo([target.lat, target.lng], target.zoom, { duration: 1.1 });
+  }, [target, map]);
+
+  return null;
+}
+
 export default function MapCanvas({
   onMouseMove,
   onMouseLeave,
   visibleLayers,
+  layerOpacity,
+  basemap,
   buildings,
   utilities,
   incidents,
   reportMode,
+  flyToTarget,
   onSelectBuilding,
   onSelectUtility,
   onMapClick,
@@ -107,13 +142,22 @@ export default function MapCanvas({
   }, [reportMode]);
 
   const buildingsKey = useMemo(
-    () => `buildings-${buildings.features.map((f) => `${f.properties.id}:${f.properties.condition}`).join("|")}`,
-    [buildings]
+    () =>
+      `buildings-${Math.round(layerOpacity.buildings * 20)}-${buildings.features
+        .map((f) => `${f.properties.id}:${f.properties.condition}`)
+        .join("|")}`,
+    [buildings, layerOpacity.buildings]
   );
   const utilitiesKey = useMemo(
-    () => `utilities-${utilities.features.map((f) => `${f.properties.id}:${f.properties.status}`).join("|")}`,
-    [utilities]
+    () =>
+      `utilities-${Math.round(layerOpacity.utilities * 20)}-${utilities.features
+        .map((f) => `${f.properties.id}:${f.properties.status}`)
+        .join("|")}`,
+    [utilities, layerOpacity.utilities]
   );
+  const roadsKey = useMemo(() => `roads-${Math.round(layerOpacity.roads * 20)}`, [layerOpacity.roads]);
+
+  const activeBasemap = getBasemap(basemap);
 
   return (
     <MapContainer
@@ -123,19 +167,26 @@ export default function MapCanvas({
       zoomControl={false}
     >
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        key={activeBasemap.id}
+        attribution={activeBasemap.attribution}
+        url={activeBasemap.url}
+        maxZoom={activeBasemap.maxZoom}
       />
       <ZoomControl position="bottomright" />
       <MouseTracker onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} />
       <ReportClickHandler reportMode={reportMode} onMapClick={onMapClick} />
+      <FlyToController target={flyToTarget} />
 
       {visibleLayers.roads && (
         <GeoJSON
-          key="roads"
+          key={roadsKey}
           data={roadsData}
           style={(feature) =>
-            roadStyle(feature!.properties!.surface_type, feature!.properties!.traffic_load)
+            roadStyle(
+              feature!.properties!.surface_type,
+              feature!.properties!.traffic_load,
+              layerOpacity.roads
+            )
           }
           onEachFeature={(feature, layer) => {
             layer.bindTooltip(feature.properties!.street_name, {
@@ -151,7 +202,7 @@ export default function MapCanvas({
         <GeoJSON
           key={buildingsKey}
           data={buildings}
-          style={(feature) => buildingStyle(feature!.properties!.condition)}
+          style={(feature) => buildingStyle(feature!.properties!.condition, layerOpacity.buildings)}
           onEachFeature={(feature, layer: Layer) => {
             const props = (feature as Feature<Polygon, BuildingProperties>).properties;
             layer.bindTooltip(props.name, {
@@ -174,7 +225,11 @@ export default function MapCanvas({
           data={utilities}
           pointToLayer={(feature, latlng) =>
             L.marker(latlng, {
-              icon: createUtilityIcon(feature.properties.utility_type, feature.properties.status),
+              icon: createUtilityIcon(
+                feature.properties.utility_type,
+                feature.properties.status,
+                layerOpacity.utilities
+              ),
             })
           }
           onEachFeature={(feature, layer: Layer) => {
@@ -198,7 +253,7 @@ export default function MapCanvas({
           <Marker
             key={incident.id}
             position={[incident.lat, incident.lng]}
-            icon={createIncidentIcon(incident.priority)}
+            icon={createIncidentIcon(incident.priority, layerOpacity.incidents)}
           >
             <Tooltip direction="top" className="map-tooltip">
               {incident.title} · {incident.category}

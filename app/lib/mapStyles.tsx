@@ -34,26 +34,31 @@ const UTILITY_COLORS: Record<UtilityType, string> = {
   Water: "#38bdf8",
 };
 
-export function buildingStyle(condition: AssetCondition) {
+export function buildingStyle(condition: AssetCondition, opacity = 1) {
   const { fill, stroke } = CONDITION_COLORS[condition];
   return {
     color: stroke,
     weight: 1.5,
     fillColor: fill,
-    fillOpacity: 0.35,
+    fillOpacity: 0.35 * opacity,
+    opacity: 0.9 * opacity,
   };
 }
 
-export function roadStyle(surfaceType: SurfaceType, trafficLoad: TrafficLoad) {
+export function roadStyle(surfaceType: SurfaceType, trafficLoad: TrafficLoad, opacity = 1) {
   return {
     color: SURFACE_COLORS[surfaceType],
     weight: TRAFFIC_WEIGHT[trafficLoad],
-    opacity: 0.85,
+    opacity: 0.85 * opacity,
     lineCap: "round" as const,
   };
 }
 
-export function createUtilityIcon(utilityType: UtilityType, status: UtilityStatus): L.DivIcon {
+export function createUtilityIcon(
+  utilityType: UtilityType,
+  status: UtilityStatus,
+  opacity = 1
+): L.DivIcon {
   const color = UTILITY_COLORS[utilityType];
   const Icon = utilityType === "Power" ? Zap : Droplets;
   const isMaintenance = status === "Maintenance";
@@ -74,6 +79,7 @@ export function createUtilityIcon(utilityType: UtilityType, status: UtilityStatu
           boxShadow: isMaintenance
             ? "0 0 0 3px rgba(245, 158, 11, 0.25)"
             : `0 0 0 3px ${color}33`,
+          opacity,
         },
       },
       createElement(Icon, { size: 11, color, strokeWidth: 2.5 })
@@ -95,7 +101,7 @@ const PRIORITY_COLORS: Record<IncidentPriority, string> = {
   High: "#ef4444",
 };
 
-export function createIncidentIcon(priority: IncidentPriority): L.DivIcon {
+export function createIncidentIcon(priority: IncidentPriority, opacity = 1): L.DivIcon {
   const color = PRIORITY_COLORS[priority];
   const pulse = priority === "High";
 
@@ -110,6 +116,7 @@ export function createIncidentIcon(priority: IncidentPriority): L.DivIcon {
           justifyContent: "center",
           width: "24px",
           height: "24px",
+          opacity,
         },
       },
       pulse &&
