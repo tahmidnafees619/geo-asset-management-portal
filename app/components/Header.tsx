@@ -7,6 +7,7 @@ import {
   Building2,
   Download,
   MapPinned,
+  Ruler,
   Search,
   Settings,
   Zap,
@@ -16,6 +17,8 @@ import type { NotificationItem } from "../lib/notifications";
 interface HeaderProps {
   reportMode: boolean;
   onToggleReportMode: () => void;
+  measureMode: boolean;
+  onToggleMeasureMode: () => void;
   onOpenSearch: () => void;
   onOpenExport: () => void;
   onOpenSettings: () => void;
@@ -38,6 +41,8 @@ function severityIcon(notification: NotificationItem) {
 export default function Header({
   reportMode,
   onToggleReportMode,
+  measureMode,
+  onToggleMeasureMode,
   onOpenSearch,
   onOpenExport,
   onOpenSettings,
@@ -102,6 +107,19 @@ export default function Header({
         >
           <AlertTriangle size={14} />
           {reportMode ? "Click Map to Report…" : "Report Incident"}
+        </button>
+
+        <button
+          type="button"
+          onClick={onToggleMeasureMode}
+          className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+            measureMode
+              ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
+              : "border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700 hover:text-emerald-400"
+          }`}
+        >
+          <Ruler size={14} />
+          {measureMode ? "Click Map to Measure…" : "Measure"}
         </button>
 
         <div className="mx-1 h-5 w-px bg-slate-800" />

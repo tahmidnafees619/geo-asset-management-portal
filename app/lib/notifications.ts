@@ -1,6 +1,7 @@
 import type { Feature, Point, Polygon } from "geojson";
 import type { BuildingProperties, UtilityProperties } from "./data/infrastructure";
 import type { Incident } from "./data/incidents";
+import { polygonCentroid } from "./geo";
 import type { SelectedFeature } from "./selection";
 
 export interface NotificationItem {
@@ -14,12 +15,6 @@ export interface NotificationItem {
   timestamp: string;
 }
 
-function polygonCenter(feature: Feature<Polygon>): [number, number] {
-  const ring = feature.geometry.coordinates[0].slice(0, -1);
-  const sum = ring.reduce((acc, [lng, lat]) => [acc[0] + lng, acc[1] + lat], [0, 0]);
-  return [sum[1] / ring.length, sum[0] / ring.length];
-}
-
 export function buildNotifications(
   buildings: Feature<Polygon, BuildingProperties>[],
   utilities: Feature<Point, UtilityProperties>[],
@@ -28,7 +23,7 @@ export function buildNotifications(
   const buildingAlerts: NotificationItem[] = buildings
     .filter((f) => f.properties.condition === "Critical")
     .map((f) => {
-      const [lat, lng] = polygonCenter(f);
+      const [lat, lng] = polygonCentroid(f);
       return {
         id: `alert-bld-${f.properties.id}`,
         title: `${f.properties.name} flagged Critical`,

@@ -4,9 +4,13 @@ import type { Layer } from "leaflet";
 import L from "leaflet";
 import { useEffect, useMemo, useRef } from "react";
 import {
+  Circle,
+  CircleMarker,
   GeoJSON,
   MapContainer,
   Marker,
+  Polygon as LeafletPolygon,
+  Polyline,
   TileLayer,
   Tooltip,
   ZoomControl,
@@ -22,6 +26,7 @@ import {
 import type { Incident } from "../lib/data/incidents";
 import { buildingStyle, createIncidentIcon, createUtilityIcon, roadStyle } from "../lib/mapStyles";
 import { getBasemap, type BasemapId } from "../lib/basemaps";
+import type { LatLng } from "../lib/measurement";
 
 // Leaflet's default marker icons reference relative asset paths that break
 // under Next.js bundling — point them at the CDN instead.
@@ -36,6 +41,7 @@ L.Icon.Default.mergeOptions({
 
 const CITY_CENTER: [number, number] = [23.8103, 90.4125];
 const DEFAULT_ZOOM = 13;
+const BUFFER_RADIUS_M = 300;
 
 export interface LayerVisibility {
   buildings: boolean;
@@ -68,10 +74,15 @@ interface MapCanvasProps {
   utilities: FeatureCollection<Point, UtilityProperties>;
   incidents: Incident[];
   reportMode: boolean;
+  measureMode: boolean;
+  measurePoints: LatLng[];
+  bufferCenter: LatLng | null;
   flyToTarget: FlyToTarget | null;
   onSelectBuilding: (id: string) => void;
   onSelectUtility: (id: string) => void;
+  onSelectIncident: (id: string) => void;
   onMapClick: (lat: number, lng: number) => void;
+  onMeasureClick: (lat: number, lng: number) => void;
 }
 
 interface MouseTrackerProps {
@@ -106,6 +117,21 @@ function ReportClickHandler({
   return null;
 }
 
+function MeasureClickHandler({
+  measureMode,
+  onMeasureClick,
+}: {
+  measureMode: boolean;
+  onMeasureClick: (lat: number, lng: number) => void;
+}) {
+  useMapEvents({
+    click(e) {
+      if (measureMode) onMeasureClick(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
+}
+
 function FlyToController({ target }: { target: FlyToTarget | null }) {
   const map = useMap();
   const lastNonce = useRef<number | null>(null);
@@ -129,17 +155,26 @@ export default function MapCanvas({
   utilities,
   incidents,
   reportMode,
+  measureMode,
+  measurePoints,
+  bufferCenter,
   flyToTarget,
   onSelectBuilding,
   onSelectUtility,
+  onSelectIncident,
   onMapClick,
+  onMeasureClick,
 }: MapCanvasProps) {
   // onEachFeature closures are captured once when a GeoJSON layer is (re)created,
-  // so reportMode is read through a ref to avoid acting on a stale value on click.
+  // so tool-mode flags are read through refs to avoid acting on stale values on click.
   const reportModeRef = useRef(reportMode);
   useEffect(() => {
     reportModeRef.current = reportMode;
   }, [reportMode]);
+  const measureModeRef = useRef(measureMode);
+  useEffect(() => {
+    measureModeRef.current = measureMode;
+  }, [measureMode]);
 
   const buildingsKey = useMemo(
     () =>
@@ -158,12 +193,13 @@ export default function MapCanvas({
   const roadsKey = useMemo(() => `roads-${Math.round(layerOpacity.roads * 20)}`, [layerOpacity.roads]);
 
   const activeBasemap = getBasemap(basemap);
+  const toolActive = reportMode || measureMode;
 
   return (
     <MapContainer
       center={CITY_CENTER}
       zoom={DEFAULT_ZOOM}
-      className={`h-full w-full bg-slate-950 ${reportMode ? "reporting-cursor" : ""}`}
+      className={`h-full w-full bg-slate-950 ${toolActive ? "reporting-cursor" : ""}`}
       zoomControl={false}
     >
       <TileLayer
@@ -175,6 +211,7 @@ export default function MapCanvas({
       <ZoomControl position="bottomright" />
       <MouseTracker onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} />
       <ReportClickHandler reportMode={reportMode} onMapClick={onMapClick} />
+      <MeasureClickHandler measureMode={measureMode} onMeasureClick={onMeasureClick} />
       <FlyToController target={flyToTarget} />
 
       {visibleLayers.roads && (
@@ -211,7 +248,7 @@ export default function MapCanvas({
               className: "map-tooltip",
             });
             layer.on("click", (e) => {
-              if (reportModeRef.current) return;
+              if (reportModeRef.current || measureModeRef.current) return;
               L.DomEvent.stopPropagation(e);
               onSelectBuilding(props.id);
             });
@@ -240,7 +277,7 @@ export default function MapCanvas({
               className: "map-tooltip",
             });
             layer.on("click", (e) => {
-              if (reportModeRef.current) return;
+              if (reportModeRef.current || measureModeRef.current) return;
               L.DomEvent.stopPropagation(e);
               onSelectUtility(props.id);
             });
@@ -254,12 +291,55 @@ export default function MapCanvas({
             key={incident.id}
             position={[incident.lat, incident.lng]}
             icon={createIncidentIcon(incident.priority, layerOpacity.incidents)}
+            eventHandlers={{
+              click: () => {
+                if (reportMode || measureMode) return;
+                onSelectIncident(incident.id);
+              },
+            }}
           >
             <Tooltip direction="top" className="map-tooltip">
               {incident.title} · {incident.category}
             </Tooltip>
           </Marker>
         ))}
+
+      {bufferCenter && (
+        <Circle
+          center={[bufferCenter.lat, bufferCenter.lng]}
+          radius={BUFFER_RADIUS_M}
+          pathOptions={{
+            color: "#34d399",
+            weight: 1.5,
+            fillColor: "#10b981",
+            fillOpacity: 0.12,
+            dashArray: "6 4",
+          }}
+        />
+      )}
+
+      {measurePoints.length > 0 && (
+        <>
+          <Polyline
+            positions={measurePoints.map((p) => [p.lat, p.lng])}
+            pathOptions={{ color: "#facc15", weight: 2, dashArray: "5 5" }}
+          />
+          {measurePoints.length >= 3 && (
+            <LeafletPolygon
+              positions={measurePoints.map((p) => [p.lat, p.lng])}
+              pathOptions={{ color: "#facc15", weight: 1, fillColor: "#facc15", fillOpacity: 0.08 }}
+            />
+          )}
+          {measurePoints.map((p, i) => (
+            <CircleMarker
+              key={i}
+              center={[p.lat, p.lng]}
+              radius={4}
+              pathOptions={{ color: "#facc15", fillColor: "#0f172a", fillOpacity: 1, weight: 2 }}
+            />
+          ))}
+        </>
+      )}
     </MapContainer>
   );
 }

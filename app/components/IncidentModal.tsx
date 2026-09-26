@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Building2, Radar, Zap } from "lucide-react";
 import {
   INCIDENT_CATEGORIES,
   INCIDENT_PRIORITIES,
@@ -9,14 +9,29 @@ import {
   type IncidentPriority,
 } from "../lib/data/incidents";
 import { formatWgs84 } from "../lib/projections";
+import type { NearbyAsset } from "../lib/geo";
+
+const NEARBY_ICON = { building: Building2, utility: Zap, incident: Radar } as const;
 
 interface IncidentModalProps {
   location: { lat: number; lng: number };
   onSubmit: (data: { title: string; category: IncidentCategory; priority: IncidentPriority }) => void;
   onCancel: () => void;
+  bufferActive: boolean;
+  nearbyAssets: NearbyAsset[];
+  onRunBuffer: () => void;
+  onClearBuffer: () => void;
 }
 
-export default function IncidentModal({ location, onSubmit, onCancel }: IncidentModalProps) {
+export default function IncidentModal({
+  location,
+  onSubmit,
+  onCancel,
+  bufferActive,
+  nearbyAssets,
+  onRunBuffer,
+  onClearBuffer,
+}: IncidentModalProps) {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<IncidentCategory>(INCIDENT_CATEGORIES[0]);
   const [priority, setPriority] = useState<IncidentPriority>("Medium");
@@ -85,6 +100,49 @@ export default function IncidentModal({ location, onSubmit, onCancel }: Incident
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="border-t border-slate-800 pt-3">
+            <button
+              type="button"
+              onClick={bufferActive ? onClearBuffer : onRunBuffer}
+              className={`flex w-full items-center justify-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition-colors ${
+                bufferActive
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                  : "border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-700 hover:text-emerald-400"
+              }`}
+            >
+              <Radar size={14} />
+              {bufferActive ? "Clear Proximity Buffer" : "Run Proximity Buffer (300m)"}
+            </button>
+
+            {bufferActive && (
+              <div className="mt-2 max-h-32 space-y-1.5 overflow-y-auto">
+                {nearbyAssets.length === 0 ? (
+                  <p className="rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-[11px] text-slate-500">
+                    No assets within 300m of this location.
+                  </p>
+                ) : (
+                  nearbyAssets.map((asset) => {
+                    const Icon = NEARBY_ICON[asset.kind];
+                    return (
+                      <div
+                        key={asset.id}
+                        className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/60 px-2.5 py-1.5"
+                      >
+                        <Icon size={11} className="shrink-0 text-emerald-400" />
+                        <span className="min-w-0 flex-1 truncate text-[11px] text-slate-300">
+                          {asset.label}
+                        </span>
+                        <span className="shrink-0 text-[10px] tabular-nums text-slate-500">
+                          {Math.round(asset.distance)}m
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">

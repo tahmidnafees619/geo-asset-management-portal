@@ -12,6 +12,7 @@ import CommandPalette from "./components/CommandPalette";
 import ExportModal from "./components/ExportModal";
 import SettingsPanel from "./components/SettingsPanel";
 import HealthHud from "./components/HealthHud";
+import MeasurementPanel from "./components/MeasurementPanel";
 import {
   buildingsData,
   roadsData,
@@ -21,6 +22,8 @@ import {
 } from "./lib/data/infrastructure";
 import type { Incident, IncidentCategory, IncidentPriority } from "./lib/data/incidents";
 import { toCoordinateReadout } from "./lib/projections";
+import { findNearbyAssets, polygonCentroid } from "./lib/geo";
+import type { LatLng } from "./lib/measurement";
 import type { SelectedFeature } from "./lib/selection";
 import { buildSearchIndex, type SearchResult } from "./lib/search";
 import { buildNotifications, type NotificationItem } from "./lib/notifications";
@@ -44,6 +47,8 @@ const DEFAULT_LAYER_OPACITY: LayerOpacity = {
   incidents: 1,
 };
 
+const BUFFER_RADIUS_M = 300;
+
 export default function Home() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [buildings, setBuildings] = useState(buildingsData);
@@ -64,6 +69,9 @@ export default function Home() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [bufferCenter, setBufferCenter] = useState<LatLng | null>(null);
+  const [measureMode, setMeasureMode] = useState(false);
+  const [measurePoints, setMeasurePoints] = useState<LatLng[]>([]);
 
   const handleMouseMove = useCallback((lat: number, lng: number) => {
     setCoords({ lat, lng });
@@ -81,15 +89,26 @@ export default function Home() {
 
   const handleSelectBuilding = useCallback((id: string) => {
     setSettingsOpen(false);
+    setBufferCenter(null);
     setSelection({ kind: "building", id });
   }, []);
 
   const handleSelectUtility = useCallback((id: string) => {
     setSettingsOpen(false);
+    setBufferCenter(null);
     setSelection({ kind: "utility", id });
   }, []);
 
-  const handleCloseDrawer = useCallback(() => setSelection(null), []);
+  const handleSelectIncident = useCallback((id: string) => {
+    setSettingsOpen(false);
+    setBufferCenter(null);
+    setSelection({ kind: "incident", id });
+  }, []);
+
+  const handleCloseDrawer = useCallback(() => {
+    setSelection(null);
+    setBufferCenter(null);
+  }, []);
 
   const handleOpenSettings = useCallback(() => {
     setSelection(null);
@@ -121,15 +140,39 @@ export default function Home() {
   }, []);
 
   const handleToggleReportMode = useCallback(() => {
-    setReportMode((prev) => !prev);
+    setReportMode((prev) => {
+      const next = !prev;
+      if (next) setMeasureMode(false);
+      return next;
+    });
   }, []);
+
+  const handleToggleMeasureMode = useCallback(() => {
+    setMeasureMode((prev) => {
+      const next = !prev;
+      if (next) {
+        setReportMode(false);
+        setMeasurePoints([]);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleMeasureClick = useCallback((lat: number, lng: number) => {
+    setMeasurePoints((prev) => [...prev, { lat, lng }]);
+  }, []);
+
+  const handleClearMeasurement = useCallback(() => setMeasurePoints([]), []);
 
   const handleMapClick = useCallback((lat: number, lng: number) => {
     setReportMode(false);
     setPendingIncident({ lat, lng });
   }, []);
 
-  const handleCancelIncident = useCallback(() => setPendingIncident(null), []);
+  const handleCancelIncident = useCallback(() => {
+    setPendingIncident(null);
+    setBufferCenter(null);
+  }, []);
 
   const handleSubmitIncident = useCallback(
     (data: { title: string; category: IncidentCategory; priority: IncidentPriority }) => {
@@ -149,19 +192,48 @@ export default function Home() {
         ]);
         return null;
       });
+      setBufferCenter(null);
     },
     []
   );
 
+  const handleRunBuffer = useCallback(() => {
+    if (!selection) return;
+    if (selection.kind === "building") {
+      const f = buildings.features.find((x) => x.properties.id === selection.id);
+      if (f) {
+        const [lat, lng] = polygonCentroid(f);
+        setBufferCenter({ lat, lng });
+      }
+    } else if (selection.kind === "utility") {
+      const f = utilities.features.find((x) => x.properties.id === selection.id);
+      if (f) {
+        const [lng, lat] = f.geometry.coordinates;
+        setBufferCenter({ lat, lng });
+      }
+    } else {
+      const inc = incidents.find((x) => x.id === selection.id);
+      if (inc) setBufferCenter({ lat: inc.lat, lng: inc.lng });
+    }
+  }, [selection, buildings, utilities, incidents]);
+
+  const handleRunBufferAtPendingIncident = useCallback(() => {
+    if (pendingIncident) setBufferCenter(pendingIncident);
+  }, [pendingIncident]);
+
+  const handleClearBuffer = useCallback(() => setBufferCenter(null), []);
+
   const handleSearchSelect = useCallback((result: SearchResult) => {
     setFlyToTarget({ lat: result.lat, lng: result.lng, zoom: result.zoom, nonce: Date.now() });
     setSearchOpen(false);
+    setBufferCenter(null);
     if (result.kind === "building") setSelection({ kind: "building", id: result.refId });
     else if (result.kind === "utility") setSelection({ kind: "utility", id: result.refId });
   }, []);
 
   const handleJumpToNotification = useCallback((notification: NotificationItem) => {
     setFlyToTarget({ lat: notification.lat, lng: notification.lng, zoom: 16, nonce: Date.now() });
+    setBufferCenter(null);
     if (notification.selection) setSelection(notification.selection);
   }, []);
 
@@ -224,9 +296,13 @@ export default function Home() {
       const data = buildings.features.find((f) => f.properties.id === selection.id);
       return data ? { kind: "building", data } : null;
     }
-    const data = utilities.features.find((f) => f.properties.id === selection.id);
-    return data ? { kind: "utility", data } : null;
-  }, [selection, buildings, utilities]);
+    if (selection.kind === "utility") {
+      const data = utilities.features.find((f) => f.properties.id === selection.id);
+      return data ? { kind: "utility", data } : null;
+    }
+    const data = incidents.find((i) => i.id === selection.id);
+    return data ? { kind: "incident", data } : null;
+  }, [selection, buildings, utilities, incidents]);
 
   const searchIndexData = useMemo(
     () => buildSearchIndex(buildings.features, utilities.features, roadsData.features),
@@ -238,11 +314,21 @@ export default function Home() {
     [buildings, utilities, incidents]
   );
 
+  const nearbyAssets = useMemo(
+    () =>
+      bufferCenter
+        ? findNearbyAssets(bufferCenter, BUFFER_RADIUS_M, buildings.features, utilities.features, incidents, selection?.id)
+        : [],
+    [bufferCenter, buildings, utilities, incidents, selection]
+  );
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
       <Header
         reportMode={reportMode}
         onToggleReportMode={handleToggleReportMode}
+        measureMode={measureMode}
+        onToggleMeasureMode={handleToggleMeasureMode}
         onOpenSearch={() => setSearchOpen(true)}
         onOpenExport={() => setExportOpen(true)}
         onOpenSettings={handleOpenSettings}
@@ -262,12 +348,18 @@ export default function Home() {
             utilities={utilities}
             incidents={incidents}
             reportMode={reportMode}
+            measureMode={measureMode}
+            measurePoints={measurePoints}
+            bufferCenter={bufferCenter}
             flyToTarget={flyToTarget}
             onSelectBuilding={handleSelectBuilding}
             onSelectUtility={handleSelectUtility}
+            onSelectIncident={handleSelectIncident}
             onMapClick={handleMapClick}
+            onMeasureClick={handleMeasureClick}
           />
           <HealthHud buildings={buildings.features} utilities={utilities.features} incidents={incidents} />
+          <MeasurementPanel active={measureMode} points={measurePoints} onClear={handleClearMeasurement} />
           <StatusBar
             lat={readout?.wgs84.lat ?? null}
             lng={readout?.wgs84.lng ?? null}
@@ -279,6 +371,10 @@ export default function Home() {
             onClose={handleCloseDrawer}
             onUpdateBuildingCondition={handleUpdateBuildingCondition}
             onUpdateUtilityStatus={handleUpdateUtilityStatus}
+            bufferActive={bufferCenter !== null}
+            nearbyAssets={nearbyAssets}
+            onRunBuffer={handleRunBuffer}
+            onClearBuffer={handleClearBuffer}
           />
           <SettingsPanel
             open={settingsOpen}
@@ -293,6 +389,10 @@ export default function Home() {
               location={pendingIncident}
               onSubmit={handleSubmitIncident}
               onCancel={handleCancelIncident}
+              bufferActive={bufferCenter !== null}
+              nearbyAssets={nearbyAssets}
+              onRunBuffer={handleRunBufferAtPendingIncident}
+              onClearBuffer={handleClearBuffer}
             />
           )}
         </main>

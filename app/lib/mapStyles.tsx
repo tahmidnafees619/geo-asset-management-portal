@@ -1,7 +1,7 @@
 import L from "leaflet";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AlertTriangle, Droplets, Zap } from "lucide-react";
+import { AlertTriangle, Cable, Droplets, Flame, Zap } from "lucide-react";
 import type {
   AssetCondition,
   SurfaceType,
@@ -32,6 +32,15 @@ export const TRAFFIC_WEIGHT: Record<TrafficLoad, number> = {
 const UTILITY_COLORS: Record<UtilityType, string> = {
   Power: "#c084fc",
   Water: "#38bdf8",
+  Gas: "#fb923c",
+  Fiber: "#22d3ee",
+};
+
+const UTILITY_ICONS: Record<UtilityType, typeof Zap> = {
+  Power: Zap,
+  Water: Droplets,
+  Gas: Flame,
+  Fiber: Cable,
 };
 
 export function buildingStyle(condition: AssetCondition, opacity = 1) {
@@ -60,7 +69,7 @@ export function createUtilityIcon(
   opacity = 1
 ): L.DivIcon {
   const color = UTILITY_COLORS[utilityType];
-  const Icon = utilityType === "Power" ? Zap : Droplets;
+  const Icon = UTILITY_ICONS[utilityType];
   const isMaintenance = status === "Maintenance";
 
   const html = renderToStaticMarkup(

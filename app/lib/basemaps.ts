@@ -14,10 +14,10 @@ export const BASEMAPS: BasemapConfig[] = [
     id: "dark",
     label: "Dark Canvas",
     description: "Low-glare vector basemap for operations consoles",
-    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    maxZoom: 20,
+    // Esri's Dark Gray Base — key-free, no CARTO watermark/rate-limit banner.
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Base/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS",
+    maxZoom: 16,
   },
   {
     id: "satellite",
